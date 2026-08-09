@@ -3,6 +3,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const aiUsageAction = "analyze-meal";
+const aiRateLimitMessage = "AI解析の利用回数が上限に達しました。時間をおいて再度お試しください。";
+const oneMinuteLimit = 3;
+const oneDayLimit = 20;
+
 const nutritionSchema = {
   type: "object",
   required: ["name", "calories", "protein", "fat", "carbs", "confidence", "items", "assumptions"],
@@ -38,6 +43,79 @@ function splitDataUrl(image: string) {
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function countUsageLogs(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+  since: Date
+) {
+  const url = new URL(`${supabaseUrl}/rest/v1/ai_usage_logs`);
+  url.searchParams.set("select", "id");
+  url.searchParams.set("user_id", `eq.${userId}`);
+  url.searchParams.set("action", `eq.${aiUsageAction}`);
+  url.searchParams.set("created_at", `gte.${since.toISOString()}`);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      Prefer: "count=exact",
+      Range: "0-0",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`AI usage count failed ${response.status}`);
+  }
+
+  const contentRange = response.headers.get("content-range") || "";
+  const total = Number(contentRange.split("/")[1]);
+  if (Number.isFinite(total)) return total;
+
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+async function recordUsageLog(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/ai_usage_logs`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ user_id: userId, action: aiUsageAction }),
+  });
+  if (!response.ok) {
+    throw new Error(`AI usage log insert failed ${response.status}`);
+  }
+}
+
+async function checkAndRecordUsage(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const now = Date.now();
+  const oneMinuteAgo = new Date(now - 60 * 1000);
+  const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+  const [minuteCount, dayCount] = await Promise.all([
+    countUsageLogs(supabaseUrl, serviceRoleKey, userId, oneMinuteAgo),
+    countUsageLogs(supabaseUrl, serviceRoleKey, userId, oneDayAgo),
+  ]);
+
+  if (minuteCount >= oneMinuteLimit || dayCount >= oneDayLimit) {
+    return false;
+  }
+
+  await recordUsageLog(supabaseUrl, serviceRoleKey, userId);
+  return true;
 }
 
 function parseStructuredResult(text: string) {
@@ -182,11 +260,12 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get("Authorization");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!authorization || !supabaseUrl || !supabaseAnonKey) {
     return jsonResponse({ error: "Authentication is required" }, 401);
   }
 
-  let isAuthenticated = false;
+  let userId = "";
   try {
     const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
@@ -194,12 +273,19 @@ Deno.serve(async (request) => {
         apikey: supabaseAnonKey,
       },
     });
-    isAuthenticated = userResponse.ok;
+    if (userResponse.ok) {
+      const user = await userResponse.json();
+      userId = typeof user?.id === "string" ? user.id : "";
+    }
   } catch (error) {
     console.error("Supabase authentication check failed", error);
   }
-  if (!isAuthenticated) {
+  if (!userId) {
     return jsonResponse({ error: "Authentication is required" }, 401);
+  }
+
+  if (!supabaseServiceRoleKey) {
+    return jsonResponse({ error: "SUPABASE_SERVICE_ROLE_KEY is not configured" }, 500);
   }
 
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -220,6 +306,11 @@ Deno.serve(async (request) => {
     const mealDetails = typeof details === "string" ? details.trim().slice(0, 1000) : "";
     if (!imageData && !labelImageData.length && !mealDetails) {
       return jsonResponse({ error: "A meal photo, nutrition label, or ingredient details are required" }, 400);
+    }
+
+    const isUsageAllowed = await checkAndRecordUsage(supabaseUrl, supabaseServiceRoleKey, userId);
+    if (!isUsageAllowed) {
+      return jsonResponse({ error: aiRateLimitMessage }, 429);
     }
 
     const preferredModel = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";

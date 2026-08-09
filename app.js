@@ -1,5 +1,6 @@
 const storeKey = "karada-log";
 const legacyStoreKey = "nourish-track-prototype";
+const aiRateLimitMessage = "AI解析の利用回数が上限に達しました。時間をおいて再度お試しください。";
 
 const defaultState = {
   settings: {
@@ -662,8 +663,8 @@ function renderWeightChart() {
   const height = 320;
   const padLeft = 58;
   const padRight = 24;
-  const padTop = 28;
-  const padBottom = 64;
+  const padTop = 48;
+  const padBottom = 54;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
   const yFor = (value) => padTop + ((max - value) / (max - min)) * plotHeight;
@@ -691,7 +692,7 @@ function renderWeightChart() {
         const y = yFor(tick);
         return `
           <line x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}" stroke="#dce4df" />
-          <text x="${padLeft - 10}" y="${y + 4}" text-anchor="end" fill="#65716d" font-size="12">${tick.toFixed(1)}</text>
+          <text x="${padLeft - 10}" y="${y + 6}" text-anchor="end" fill="#65716d" font-size="20">${tick.toFixed(1)}</text>
         `;
       })
       .join("")}
@@ -700,18 +701,18 @@ function renderWeightChart() {
         if (index !== 0 && index !== points.length - 1 && index % labelEvery !== 0) return "";
         return `
           <line x1="${point.x}" y1="${height - padBottom}" x2="${point.x}" y2="${height - padBottom + 6}" stroke="#aebbb4" />
-          <text x="${point.x}" y="${height - 28}" text-anchor="middle" fill="#65716d" font-size="12">${dateLabel(point.item.date)}</text>
+          <text x="${point.x}" y="${height - 30}" text-anchor="middle" fill="#65716d" font-size="20">${dateLabel(point.item.date)}</text>
         `;
       })
       .join("")}
-    <text x="${padLeft}" y="18" fill="#65716d" font-size="12">kg</text>
-    <text x="${width - padRight}" y="${height - 8}" text-anchor="end" fill="#65716d" font-size="12">日付</text>
-    <polyline points="${line}" fill="none" stroke="#1f9d7a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="${padLeft}" y="26" fill="#65716d" font-size="20">kg</text>
+    <text x="${width - padRight}" y="${height - 10}" text-anchor="end" fill="#65716d" font-size="20">日付</text>
+    <polyline points="${line}" fill="none" stroke="#1f9d7a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
     ${points
       .map(
         (point) => `
-      <circle cx="${point.x}" cy="${point.y}" r="5" fill="#1f9d7a" />
-      <text x="${point.x}" y="${point.y - 12}" text-anchor="middle" fill="#17211f" font-size="12">${number(point.item.value).toFixed(1)}</text>
+      <circle cx="${point.x}" cy="${point.y}" r="6" fill="#1f9d7a" />
+      <text x="${point.x}" y="${point.y - 22}" text-anchor="middle" fill="#17211f" font-size="24">${number(point.item.value).toFixed(1)}</text>
     `
       )
       .join("")}
@@ -949,9 +950,12 @@ $("estimateButton").addEventListener("click", async () => {
     setStatus("mealStatus", "AI推定が完了しました。内容と量を確認してから保存してください。");
   } catch (error) {
     console.error("AI meal analysis failed", error);
+    const message = error instanceof Error ? error.message : "";
     setStatus(
       "mealStatus",
-      `AI解析に失敗しました。${error instanceof Error ? error.message : "しばらく待って再試行してください。"}`,
+      message === aiRateLimitMessage
+        ? aiRateLimitMessage
+        : `AI解析に失敗しました。${message || "しばらく待って再試行してください。"}`,
       "error"
     );
   } finally {
