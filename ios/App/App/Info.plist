@@ -25,9 +25,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>アップロードする食事写真を撮影するためにカメラを使用します。</string>
+	<string>食べた料理や食品の栄養成分表示を撮影して食事記録に追加するために、カメラを使用します。撮影した写真はAIによるカロリー・栄養素の推定に使われ、あなたのアカウントにのみ保存されます。例：昼食のパスタを撮影すると、その写真から推定カロリーとPFCを算出して記録に残せます。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>食事記録に追加する写真を選択するために写真ライブラリを使用します。</string>
+	<string>すでに撮影済みの料理や栄養成分表示の写真を選んで食事記録に追加するために、写真ライブラリを使用します。選択した写真はAIによるカロリー・栄養素の推定に使われ、あなたのアカウントにのみ保存されます。例：昨夜の夕食の写真を選ぶと、その写真から推定カロリーとPFCを算出して記録に残せます。</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
