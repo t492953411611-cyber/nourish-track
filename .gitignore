@@ -10,3 +10,4 @@ ios/DerivedData/
 ios/xcuserdata/
 ios/App/App.xcodeproj/xcuserdata/
 ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+.DS_Store
