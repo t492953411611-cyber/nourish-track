@@ -11,3 +11,9 @@ ios/xcuserdata/
 ios/App/App.xcodeproj/xcuserdata/
 ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
 .DS_Store
+
+# Generated App Store assets and build output
+build/
+output/
+appstore_screenshots/
+image.png
